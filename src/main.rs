@@ -1,16 +1,34 @@
-use kalosm::language::*;
+use kalosm::sound::*;
 
 #[tokio::main]
 async fn main() {
-    let model = Llama::new_chat().await.unwrap();
-    let mut chat = Chat::builder(model)
-        .with_system_prompt("The assistant will act like a pirate")
-        .build();
+    // Transcription-model
+    let model = Whisper::builder()
+        .build_with_loading_handler(|progress| match progress {
+            ModelLoadingProgress::Downloading {
+                source,
+                start_time,
+                progress,
+            } => {
+                let progress = (progress * 100.0) as u32;
+                let elapsed = start_time.elapsed().as_secs_f32();
+                println!("Downloading file {source} {progress}% ({elapsed}s)");
+            }
+            ModelLoadingProgress::Loading { progress } => {
+                let progress = (progress * 100.0) as u32;
+                println!("Loading model {progress}%");
+            }
+        })
+        .await
+        .unwrap();
 
-    loop {
-        chat.add_message(prompt_input("\n>").unwrap())
-            .to_std_out()
-            .await
-            .unwrap();
-    }
+    // Stream audio from the microphone
+    let mic = MicInput::default();
+    let stream = mic.stream().unwrap();
+
+    // Transcribe the audio.
+    let mut transcribed = stream.transcribe(model);
+
+    // As the model transcribes the audio, print the text to the console.
+    transcribed.to_std_out().await.unwrap();
 }
